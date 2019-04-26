@@ -1,4 +1,18 @@
-Pointnet2/Pointnet++ PyTorch
+Pointnet++ PyTorch
+============================
+* sample conda env: /private/home/s9xie/.conda/envs/s9xie_env
+
+* load modules
+  
+  ::
+    source module_load.sh
+* Building `_ext` module
+  
+  ::
+    python setup.py build_ext --inplace
+
+
+(OLD README) Pointnet2/Pointnet++ PyTorch
 ============================
 
 * Implemention of Pointnet2/Pointnet++ written in `PyTorch <http://pytorch.org>`_.
