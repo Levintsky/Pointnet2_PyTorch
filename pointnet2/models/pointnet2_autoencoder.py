@@ -1,23 +1,12 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
+import etw_pytorch_utils as pt_utils
+from pointnet2.utils.pointnet2_modules import PointnetSAModuleMSG, PointnetSAModule
 
 
 class Pointnet2Encoder(nn.Module):
-    r"""
-        PointNet2 with multi-scale grouping
-        Classification network
-
-        Parameters
-        ----------
-        num_classes: int
-            Number of semantics classes to predict over -- size of softmax classifier
-        input_channels: int = 3
-            Number of input channels in the feature descriptor for each point.  If the point cloud is Nx9, this
-            value should be 6 as in an Nx9 point cloud, 3 of the channels are xyz, and 6 are feature descriptors
-        use_xyz: bool = True
-            Whether or not to use the xyz position of a point as a feature
-    """
-
     def __init__(self, input_channels=3, use_xyz=True):
         super(Pointnet2Encoder, self).__init__()
 
@@ -58,7 +47,7 @@ class Pointnet2Encoder(nn.Module):
             pt_utils.Seq(1024)
             .fc(512, bn=True)
             .dropout(0.5)
-            .fc(256, bn=True)
+            .fc(256)
             # .dropout(0.5)
             # .fc(num_classes, activation=None)
         )
@@ -90,36 +79,67 @@ class Pointnet2Encoder(nn.Module):
         return self.FC_layer(features.squeeze(-1))
 
 
-class PointnetDecoder(nn.Module):
+class Pointnet2Decoder(nn.Module):
     def __init__(self, in_dim=256, out_dim=2048):
-        super(Pointnet2Encoder, self).__init__()
+        super(Pointnet2Decoder, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
+        self.linear1 = nn.Linear(256, 1024)
+        self.bn1 = nn.BatchNorm1d(1024)
+        self.linear2 = nn.Linear(1024, 1024)
+        self.bn2 = nn.BatchNorm1d(1024)
+        self.linear3 = nn.Linear(1024, out_dim * 3)
+        """
         self.model = nn.ModuleList()
         self.model.append(
-            nn.linear(256, 1024),
+            nn.Linear(256, 1024),
             nn.ReLU(),
-            nn.linear(1024, 1024),
+            nn.Linear(1024, 1024),
             nn.ReLU(),
-            nn.linear(1024, out_dim*3)
+            nn.Linear(1024, out_dim*3)
         )
+        """
 
     def forward(self, pts):
-    	pts = self.model(pts)
-    	pts = pts.view(-1, self.out_dim, 3)
-    	return pts
+        # pts = self.model(pts)
+        pts = self.linear1(pts)
+        pts = F.relu(self.bn1(pts))
+        pts = self.linear2(pts)
+        pts = F.relu(self.bn2(pts))
+        pts = self.linear3(pts)
+        pts = pts.view(-1, self.out_dim, 3)
+        return pts
 
 
 class Pointnet2AE(nn.Module):
-	def __init__(self):
-		"""
-		The encoder takes as input an array of (B, N, 3),
-		  and output
-		"""
-		self.encoder = Pointnet2Encoder(input_channels=3, use_xyz=True)
-		self.decoder = PointnetDecoder()
+    def __init__(self):
+        """
+        The encoder takes as input an array of (B, N, 3),
+          and output
+        """
+        super(Pointnet2AE, self).__init__()
+        self.encoder = Pointnet2Encoder(input_channels=3, use_xyz=True)
+        self.decoder = Pointnet2Decoder()
 
-	def forward(self, pts):
-		z = self.encoder(pts)
-		pts_reconstruct = self.decoder(z)
-		return pts_reconstruct
+    def forward(self, pts):
+        z = self.encoder(pts)
+        pts_reconstruct = self.decoder(z)
+        return pts_reconstruct
+
+
+if __name__ == "__main__":
+    model = Pointnet2Encoder(input_channels=0, num_classes=40, use_xyz=True)
+    model.cuda()
+
+    import numpy as np
+    data = np.random.normal(size=(2,2048,3)).astype(np.float32)
+    data = torch.tensor(data).cuda()
+
+    out = model(data)
+    print(out.shape)
+    """
+    model = Pointnet2AE().cuda()
+    data = np.random.normal(size=(2, 2048, 3)).astype(np.float32)
+    data = torch.tensor(data).cuda()
+    out = model(data)
+    """
